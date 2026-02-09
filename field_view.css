@@ -1,0 +1,21 @@
+/* Field view pane extras */
+.hidden{display:none !important}
+.field-view{display:grid;gap:.75rem}
+.fv-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem}
+.smart-table{width:100%;border-collapse:separate;border-spacing:0 .5rem}
+.smart-table th{text-align:left;font-weight:600;opacity:.7;padding:.25rem .5rem}
+.smart-table td{padding:.5rem .75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
+.smart-table tr td:first-child{border-top-left-radius:.75rem;border-bottom-left-radius:.75rem}
+.smart-table tr td:last-child{border-top-right-radius:.75rem;border-bottom-right-radius:.75rem}
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12)}
+.meta{display:flex;gap:.75rem;align-items:center}
+.card-title{font-size:1.05rem;font-weight:700}
+.card-sub{opacity:.8}
+.list-wrap{max-height:40vh;overflow:auto;border:1px dashed rgba(255,255,255,.1);border-radius:12px;padding:.5rem}
+.list-wrap h4{margin:.25rem .5rem .5rem .5rem;opacity:.8}
+.list-grid{display:grid;grid-template-columns: 140px 1fr;gap:.35rem .75rem;padding:.5rem}
+.list-grid .k{opacity:.7}
+.btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;padding:.35rem .75rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+.btn:hover{background:rgba(255,255,255,.12)}
+.btn.primary{background:linear-gradient(135deg,#1f9dff55,#2de39a44);border-color:transparent}
+.toast{position:fixed;right:1rem;bottom:1rem;padding:.75rem 1rem;border-radius:.75rem;background:#1f2937;color:#fff;box-shadow:0 6px 30px rgba(0,0,0,.35);z-index:9999}

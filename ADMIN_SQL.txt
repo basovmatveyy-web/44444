@@ -1,0 +1,19 @@
+-- SQL для минимально необходимой структуры админки
+-- Таблица cultures
+CREATE TABLE IF NOT EXISTS cultures (
+  id INT NOT NULL AUTO_INCREMENT,
+  name VARCHAR(191) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_cultures_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Таблица users (если у тебя уже есть — не выполнять! здесь для справки)
+-- CREATE TABLE IF NOT EXISTS users (
+--   id INT NOT NULL AUTO_INCREMENT,
+--   login VARCHAR(191) NOT NULL UNIQUE,
+--   password VARCHAR(191) NOT NULL,
+--   first_name VARCHAR(191) DEFAULT NULL,
+--   last_name  VARCHAR(191) DEFAULT NULL,
+--   role ENUM('admin','user') NOT NULL DEFAULT 'user',
+--   PRIMARY KEY (id)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

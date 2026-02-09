@@ -1,0 +1,13 @@
+-- SQL для Telegram настроек
+CREATE TABLE IF NOT EXISTS `telegram_settings` (
+  `id` TINYINT PRIMARY KEY DEFAULT 1,
+  `token` VARCHAR(128) NOT NULL DEFAULT '',
+  `admin_chat` VARCHAR(64) NOT NULL DEFAULT '',
+  `secret` VARCHAR(64) NOT NULL DEFAULT '',
+  `notify_save` TINYINT(1) NOT NULL DEFAULT 1,
+  `notify_logins` TINYINT(1) NOT NULL DEFAULT 1,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `telegram_settings` (`id`,`secret`) VALUES (1, HEX(RANDOM_BYTES(16)))
+  ON DUPLICATE KEY UPDATE `id`=`id`;

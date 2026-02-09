@@ -1,0 +1,39 @@
+<!-- telegram_panel.html — готовый блок Telegram (ID + name + data-tg) -->
+<section class="pane" id="tgPane">
+  <h2>Telegram — настройки</h2>
+  <div id="tgBotMeta" class="muted" style="margin-bottom:10px"></div>
+
+  <div class="row gap" style="align-items:flex-end">
+    <label style="flex:2">Токен бота
+      <input id="tgToken" name="tg_token" data-tg="token" placeholder="1234567890:ABCDEF...">
+    </label>
+    <label style="flex:1">Chat ID администратора
+      <input id="tgAdminChat" name="tg_admin_chat" data-tg="admin_chat" placeholder="123456789 или @username">
+    </label>
+  </div>
+
+  <label class="row" style="gap:8px;margin-top:12px">
+    <input type="checkbox" id="tgNotifySave" name="tg_notify_save" data-tg="notify_save" checked>
+    Уведомлять о сохранениях/изменениях
+  </label>
+
+  <label class="row" style="gap:8px;margin-top:6px">
+    <input type="checkbox" id="tgNotifyLogins" name="tg_notify_logins" data-tg="notify_logins" checked>
+    Уведомлять о входах пользователей
+  </label>
+
+  <div class="row gap" style="margin-top:12px">
+    <button class="btn primary" id="tgSaveBtn" type="button">Сохранить</button>
+    <button class="btn" id="tgTestBtn" type="button">Тест</button>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Секрет привязки (для /bind)
+      <input id="tgSecret" name="tg_secret" data-tg="secret" readonly>
+    </label>
+    <button class="btn" id="tgRegenSecretBtn" type="button">Сгенерировать заново</button>
+  </div>
+</section>
+
+<!-- Подключить этот файл в самом НИЗУ admin.php -->
+<script src="admin_tg_safe.js?v=3"></script>

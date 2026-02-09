@@ -1,0 +1,75 @@
+
+<section class="pane" id="tgPane">
+  <h2>Telegram — настройки</h2>
+  <div class="glass" style="display:flex;gap:12px;align-items:center;padding:10px 12px;margin-bottom:12px">
+    <div class="badge" id="tgBotBadge" style="padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03)">Бот: —</div>
+    <div class="badge" id="tgHookBadge" style="padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03)">Webhook: —</div>
+    <div class="badge" id="tgSubsBadge" style="padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.03)">Подписчики: 0</div>
+    <div class="muted" id="tgTokenTail" style="margin-left:auto">Токен: —</div>
+  </div>
+
+  <div class="row gap" style="align-items:flex-end">
+    <label style="flex:2">Токен бота
+      <input id="tgToken" placeholder="1234567890:ABCDEF...">
+    </label>
+    <label style="flex:1">Chat ID администратора
+      <input id="tgAdminChat" placeholder="123456789 или @username">
+    </label>
+  </div>
+
+  <div class="row gap" style="margin-top:12px;flex-wrap:wrap">
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifySave"> Уведомлять об изменениях/сохранениях</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyLogins" checked> Уведомлять о входах пользователей</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyUsers" checked> Уведомлять о действиях пользователей</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyErrors" checked> Уведомлять об ошибках</label>
+  </div>
+
+  <div class="row gap" style="margin-top:12px;flex-wrap:wrap">
+    <button class="btn primary" id="tgSaveBtn" type="button">Сохранить</button>
+    <button class="btn" id="tgSaveAndHookBtn" type="button">Сохранить и поставить webhook</button>
+    <button class="btn" id="tgSetHookBtn" type="button">Поставить webhook</button>
+    <button class="btn" id="tgInfoHookBtn" type="button">Проверить webhook</button>
+    <button class="btn" id="tgDelHookBtn" type="button">Снять webhook</button>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Секрет webhook/привязки
+      <input id="tgSecret" readonly>
+    </label>
+    <button class="btn" id="tgRegenSecretBtn" type="button">Сгенерировать заново</button>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Тестовое сообщение
+      <input id="tgTestText" placeholder="Проверка связи с ботом.">
+    </label>
+    <button class="btn" id="tgTestBtn" type="button">Тест</button>
+  </div>
+
+  <div class="space"></div>
+  <div class="row" style="gap:12px;flex-wrap:wrap">
+    <div class="glass" style="flex:1; min-width:320px; padding:12px">
+      <div class="row" style="justify-content:space-between; align-items:center">
+        <h3 style="margin:0">Подписчики</h3>
+        <div class="row" style="gap:8px">
+          <button class="btn ghost" id="tgLoadSubsBtn" type="button">Обновить</button>
+        </div>
+      </div>
+      <div id="tgSubsList" style="max-height:280px; overflow:auto; margin-top:8px"></div>
+    </div>
+
+    <div class="glass" style="flex:1; min-width:320px; padding:12px">
+      <h3 style="margin:0 0 8px 0">Широковещательная рассылка</h3>
+      <textarea id="tgBroadcastText" class="input" placeholder="Текст для всех подписчиков" style="width:100%; height:140px; resize:vertical"></textarea>
+      <div class="row" style="margin-top:8px; gap:8px">
+        <button class="btn" id="tgBroadcastBtn" type="button">Отправить всем</button>
+      </div>
+      <div class="muted" id="tgBroadcastMeta" style="margin-top:6px"></div>
+    </div>
+
+    <div class="glass" style="flex:1; min-width:320px; padding:12px">
+      <h3 style="margin:0 0 8px 0">Информация о webhook</h3>
+      <div id="tgHookInfo" class="muted">—</div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,149 @@
+
+document.addEventListener('DOMContentLoaded', function(){
+  const qs = (s)=>document.querySelector(s);
+
+  const viewport = qs('#viewport'), mapImg = qs('#mapImg');
+  const btnIn = qs('#zoomIn'), btnOut = qs('#zoomOut'), btnReset = qs('#reset');
+
+  let scale = 1;
+  let pos = {x:0, y:0};
+  let dragging = false;
+  let start = {x:0, y:0};
+  let startPos = {x:0, y:0};
+  const minScale = 0.3, maxScale = 3;
+
+  function apply(){
+    mapImg.style.transformOrigin = 'top left';
+    mapImg.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+  }
+
+  function fit(){
+    const vb = viewport.getBoundingClientRect();
+    const iw = mapImg.naturalWidth || mapImg.width;
+    const ih = mapImg.naturalHeight || mapImg.height;
+    const s = Math.min(vb.width/iw, vb.height/ih);
+    scale = Math.min(maxScale, Math.max(minScale, s));
+    pos.x = (vb.width  - iw*scale)/2;
+    pos.y = (vb.height - ih*scale)/2;
+    apply();
+  }
+
+  function zoom(delta, cx=null, cy=null){
+    const target = scale * (1 + delta);
+    const next = Math.min(maxScale, Math.max(minScale, target));
+    if (cx === null || cy === null){
+      const vb = viewport.getBoundingClientRect();
+      cx = vb.width/2; cy = vb.height/2;
+    }
+    const ix = (cx - pos.x)/scale, iy = (cy - pos.y)/scale;
+    scale = next;
+    pos.x = cx - ix*scale;
+    pos.y = cy - iy*scale;
+    apply();
+  }
+
+  // ===== gestures toggle =====
+  let gesturesEnabled = true;
+  const tgl = qs('#gestureInput');
+  function updateGesturesUI(){
+    document.body.classList.toggle('gestures-off', !gesturesEnabled);
+  }
+  if (tgl){
+    gesturesEnabled = !!tgl.checked;
+    tgl.addEventListener('change', ()=>{ gesturesEnabled = tgl.checked; updateGesturesUI(); });
+    updateGesturesUI();
+  }
+
+  // ===== Buttons (respect toggle) =====
+  if (btnIn)   btnIn.addEventListener('click',  ()=>{ if(!gesturesEnabled) return; zoom(0.15); });
+  if (btnOut)  btnOut.addEventListener('click',  ()=>{ if(!gesturesEnabled) return; zoom(-0.15); });
+  if (btnReset)btnReset.addEventListener('click', ()=>{ if(!gesturesEnabled) return; fit(); });
+
+  // ===== Mouse drag =====
+  viewport.addEventListener('mousedown', (e)=>{
+    if(!gesturesEnabled) return;
+    dragging = true;
+    viewport.classList.add('grabbing');
+    start.x = e.clientX; start.y = e.clientY;
+    startPos.x = pos.x;  startPos.y = pos.y;
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!dragging) return;
+    pos.x = startPos.x + (e.clientX - start.x);
+    pos.y = startPos.y + (e.clientY - start.y);
+    apply();
+  });
+  window.addEventListener('mouseup', ()=>{
+    dragging = false;
+    viewport.classList.remove('grabbing');
+  });
+
+  // ===== Touch pan (one finger) =====
+  viewport.addEventListener('touchstart', (e)=>{
+    if(!gesturesEnabled) return;
+    if(e.touches && e.touches.length===1){
+      dragging = true;
+      viewport.classList.add('grabbing');
+      start.x = e.touches[0].clientX; start.y = e.touches[0].clientY;
+      startPos.x = pos.x; startPos.y = pos.y;
+      e.preventDefault();
+    }
+  }, {passive:false});
+  window.addEventListener('touchmove', (e)=>{
+    if(!gesturesEnabled) return;
+    if(!(dragging && e.touches && e.touches.length===1)) return;
+    pos.x = startPos.x + (e.touches[0].clientX - start.x);
+    pos.y = startPos.y + (e.touches[0].clientY - start.y);
+    apply();
+    e.preventDefault();
+  }, {passive:false});
+  window.addEventListener('touchend', (e)=>{
+    if(!gesturesEnabled) return;
+    dragging = false;
+    viewport.classList.remove('grabbing');
+  }, {passive:false});
+
+  // ===== Pinch zoom (two fingers) =====
+  let pinching=false, pinchStart=1, pinchStartScale=1, pinchCx=0, pinchCy=0, pinchIx=0, pinchIy=0;
+  viewport.addEventListener('touchstart', (e)=>{
+    if(!gesturesEnabled) return;
+    if(e.touches && e.touches.length===2){
+      pinching = true; dragging = false;
+      const t1=e.touches[0], t2=e.touches[1];
+      pinchStart = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1;
+      pinchStartScale = scale;
+      pinchCx = (t1.clientX + t2.clientX)/2;
+      pinchCy = (t1.clientY + t2.clientY)/2;
+      pinchIx = (pinchCx - pos.x)/scale;
+      pinchIy = (pinchCy - pos.y)/scale;
+      e.preventDefault();
+    }
+  }, {passive:false});
+  window.addEventListener('touchmove', (e)=>{
+    if(!gesturesEnabled) return;
+    if(!(pinching && e.touches && e.touches.length===2)) return;
+    const t1=e.touches[0], t2=e.touches[1];
+    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1;
+    const target = pinchStartScale * (dist / pinchStart);
+    scale = Math.min(maxScale, Math.max(minScale, target));
+    pos.x = pinchCx - pinchIx * scale;
+    pos.y = pinchCy - pinchIy * scale;
+    apply();
+    e.preventDefault();
+  }, {passive:false});
+  window.addEventListener('touchend', (e)=>{
+    if(!gesturesEnabled) return;
+    if(!e.touches || e.touches.length<2) pinching=false;
+  }, {passive:false});
+
+  // ===== Fit on load/resize =====
+  function fitWhenReady(){
+    if (!mapImg.naturalWidth){
+      mapImg.addEventListener('load', fit, {once:true});
+    } else {
+      fit();
+    }
+  }
+  window.addEventListener('resize', fitWhenReady);
+  fitWhenReady();
+});

@@ -1,0 +1,898 @@
+/* Field Editor PRO — премиум-редизайн модалки "Редактирование участка" */
+/* Стили ограничены #modalEdit, механика не трогается. */
+
+#modalEdit .fe-edit{
+  --fe-accent:  #57E3A6;
+  --fe-accent2: #7AA8FF;
+  --fe-warn:    #FFCC66;
+  --fe-bad:     #FF5C7A;
+
+  --fe-text:  rgba(255,255,255,.92);
+  --fe-muted: rgba(255,255,255,.62);
+  --fe-dim:   rgba(255,255,255,.45);
+
+  --fe-stroke:  rgba(255,255,255,.12);
+  --fe-stroke2: rgba(255,255,255,.18);
+
+  max-width: 1120px;
+  width: min(1120px, 96vw);
+  height: min(880px, 86vh);
+  padding: 0;
+  border-radius: 28px;
+  overflow: hidden;
+
+  color: var(--fe-text);
+  background:
+    radial-gradient(900px 520px at 8% 0%, rgba(122,168,255,.20), transparent 55%),
+    radial-gradient(700px 520px at 100% 18%, rgba(87,227,166,.16), transparent 60%),
+    radial-gradient(900px 720px at 40% 120%, rgba(34,211,238,.10), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)),
+    rgba(9,12,20,.96);
+  box-shadow: 0 30px 90px rgba(0,0,0,.72);
+  border: 1px solid rgba(255,255,255,.14);
+}
+
+#modalEdit .fe-edit::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.020), rgba(255,255,255,.020) 1px, transparent 1px, transparent 8px),
+    radial-gradient(circle at 22% 28%, rgba(255,255,255,.06), transparent 44%),
+    radial-gradient(circle at 80% 62%, rgba(255,255,255,.04), transparent 46%);
+  opacity:.35;
+  pointer-events:none;
+  mix-blend-mode: overlay;
+}
+
+#modalEdit .fe-edit::after{
+  content:"";
+  position:absolute;
+  inset:-40% -30%;
+  background: conic-gradient(from 180deg, rgba(122,168,255,.0), rgba(122,168,255,.14), rgba(87,227,166,.12), rgba(34,211,238,.10), rgba(122,168,255,.0));
+  filter: blur(38px);
+  opacity:.55;
+  pointer-events:none;
+  animation: feGlow 16s linear infinite;
+}
+
+@keyframes feGlow{
+  0%{ transform: translate3d(-6%, -2%, 0) rotate(0deg); }
+  50%{ transform: translate3d(6%, 3%, 0) rotate(180deg); }
+  100%{ transform: translate3d(-6%, -2%, 0) rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  #modalEdit .fe-edit::after{ animation: none; }
+}
+
+#modalEdit .fe-edit__layout{
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  min-height: 0; /* iOS/Safari: без этого внутренние скроллы могут не работать */
+}
+
+/* NAV */
+#modalEdit .fe-edit__nav{
+  position: relative;
+  padding: 18px 14px 14px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+
+#modalEdit .fe-edit__brand{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.14);
+  box-shadow: 0 12px 28px rgba(0,0,0,.25);
+}
+
+#modalEdit .fe-edit__brand-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fe-accent);
+  box-shadow: 0 0 0 7px rgba(87,227,166,.14);
+}
+
+#modalEdit .fe-edit__brand-txt b{
+  display:block;
+  font-size: 13px;
+  letter-spacing:.35px;
+}
+#modalEdit .fe-edit__brand-txt span{
+  display:block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fe-muted);
+}
+
+#modalEdit .fe-edit__navlist{
+  margin-top: 14px;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+  padding: 4px;
+}
+
+#modalEdit .fe-edit__tab{
+  appearance:none;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 18px;
+  background: rgba(255,255,255,.03);
+  color: var(--fe-text);
+  padding: 12px 12px;
+  cursor:pointer;
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  text-align:left;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+#modalEdit .fe-edit__tab:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.18);
+  background: rgba(255,255,255,.05);
+  box-shadow: 0 14px 32px rgba(0,0,0,.30);
+}
+
+#modalEdit .fe-edit__tab.is-active{
+  border-color: rgba(87,227,166,.26);
+  background:
+    radial-gradient(680px 190px at 18% 50%, rgba(87,227,166,.20), transparent 60%),
+    radial-gradient(680px 190px at 85% 50%, rgba(122,168,255,.16), transparent 60%),
+    rgba(255,255,255,.04);
+  box-shadow: 0 18px 40px rgba(0,0,0,.34);
+}
+
+#modalEdit .fe-edit__tab-ico{
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.12);
+  display:grid;
+  place-items:center;
+  flex: 0 0 auto;
+}
+
+#modalEdit .fe-edit__tab-ico::after{
+  content:"";
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--fe-accent2), var(--fe-accent));
+  opacity: .92;
+}
+
+#modalEdit .fe-edit__tab-txt{
+  display:flex;
+  flex-direction:column;
+  gap: 3px;
+  min-width: 0;
+}
+#modalEdit .fe-edit__tab-txt b{
+  font-size: 13px;
+  letter-spacing: .25px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#modalEdit .fe-edit__tab-txt small{
+  font-size: 12px;
+  color: rgba(255,255,255,.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#modalEdit .fe-edit__navmeta{
+  margin-top: 16px;
+  padding: 12px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(0,0,0,.16);
+  color: var(--fe-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+#modalEdit .fe-edit__navmeta b{ color: rgba(255,255,255,.86); }
+#modalEdit .fe-edit__navmeta-row{ margin: 2px 0; }
+
+/* MAIN */
+#modalEdit .fe-edit__main{
+  position: relative;
+  display:flex;
+  flex-direction:column;
+  min-width: 0;
+  min-height: 0; /* iOS/Safari: позволяет .fe-edit__content нормально скроллиться */
+}
+
+#modalEdit .fe-edit__topbar{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(8,11,18,.58);
+  backdrop-filter: blur(14px);
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 14px;
+}
+
+#modalEdit .fe-edit__kicker{
+  font-size: 12px;
+  color: rgba(255,255,255,.60);
+  letter-spacing:.35px;
+  text-transform: uppercase;
+}
+
+#modalEdit #editTitle{
+  margin: 2px 0 6px;
+  font-size: 22px;
+  letter-spacing: .2px;
+}
+
+#modalEdit .fe-edit__chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap: 8px;
+}
+
+#modalEdit .fe-badge{
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: var(--fe-muted);
+  font-size: 12px;
+}
+#modalEdit .fe-badge i{
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.35);
+}
+
+#modalEdit #feBadgeState[data-state="clean"] i{ background: var(--fe-accent); }
+#modalEdit #feBadgeState[data-state="dirty"] i{ background: var(--fe-warn); }
+#modalEdit #feBadgeState[data-state="saving"] i{ background: var(--fe-accent2); }
+#modalEdit #feBadgeState[data-state="clean"] span{ color: rgba(255,255,255,.84); }
+#modalEdit #feBadgeState[data-state="dirty"] span{ color: rgba(255,255,255,.88); }
+#modalEdit #feBadgeState[data-state="saving"] span{ color: rgba(255,255,255,.90); }
+
+#modalEdit .fe-edit__actions{
+  display:flex;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+#modalEdit .fe-btn{
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.05);
+  color: var(--fe-text);
+  padding: 10px 14px;
+  border-radius: 16px;
+  cursor:pointer;
+  font-weight: 700;
+  letter-spacing:.15px;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+/* small button variant (used in History tools) */
+#modalEdit .fe-btn.sm{
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+}
+#modalEdit .fe-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.07);
+  box-shadow: 0 14px 34px rgba(0,0,0,.32);
+}
+#modalEdit .fe-btn:active{ transform: translateY(0); }
+
+#modalEdit .fe-btn.primary{
+  border-color: rgba(87,227,166,.22);
+  background:
+    linear-gradient(135deg, rgba(87,227,166,.26), rgba(122,168,255,.16));
+  box-shadow: 0 18px 40px rgba(0,0,0,.34);
+  position: relative;
+  overflow:hidden;
+}
+#modalEdit .fe-btn.primary::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+  transform: translateX(-60%);
+  transition: transform .55s ease;
+  pointer-events:none;
+}
+#modalEdit .fe-btn.primary:hover::after{ transform: translateX(60%); }
+
+#modalEdit .fe-btn.ghost{
+  background: rgba(0,0,0,.18);
+  color: rgba(255,255,255,.72);
+}
+
+#modalEdit .fe-edit__content{
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 18px 18px 16px;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+/* Bottom action bar (mobile) */
+#modalEdit .fe-edit__bottombar{
+  display:none;
+  gap: 10px;
+  align-items:center;
+  justify-content:flex-end;
+  padding: 12px 14px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(8,11,18,.62);
+  backdrop-filter: blur(14px);
+}
+
+#modalEdit .fe-edit__content::-webkit-scrollbar{ width: 10px; }
+#modalEdit .fe-edit__content::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.10);
+  border-radius: 10px;
+  border: 2px solid rgba(0,0,0,.25);
+}
+#modalEdit .fe-edit__content::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,.16); }
+
+#modalEdit .fe-form{ margin: 0; }
+
+/* PANELS + SHEETS */
+#modalEdit .fe-panel{ display:none; animation: fePanelIn .22s ease both; }
+#modalEdit .fe-panel.is-active{ display:block; }
+@keyframes fePanelIn{
+  from{ opacity: 0; transform: translateY(8px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+#modalEdit .fe-sheet{
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.035);
+  box-shadow: 0 18px 46px rgba(0,0,0,.30);
+  padding: 16px 16px 14px;
+}
+
+#modalEdit .fe-sheet__head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+#modalEdit .fe-sheet__head--tools{ gap: 12px; }
+#modalEdit .fe-sheet__tools{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+
+/* Inline History (used in field card + in editor tab) */
+#modalEdit .fe-hist,
+.field-card .fe-hist{ margin-top: 12px; }
+
+.fe-hist__tabs{
+  display:flex;
+  gap: 8px;
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 0;
+}
+.fe-hist__tab{
+  flex: 0 0 auto;
+  cursor:pointer;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.78);
+  padding: 8px 12px;
+  font-weight: 800;
+  letter-spacing: .12px;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.fe-hist__tab:active{ transform: translateY(1px); }
+.fe-hist__tab.is-active{
+  border-color: rgba(87,227,166,.28);
+  background: linear-gradient(135deg, rgba(87,227,166,.18), rgba(122,168,255,.10));
+  color: rgba(255,255,255,.92);
+}
+
+.fe-hist__list{
+  margin-top: 12px;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+
+.fe-hist__item{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.16);
+  padding: 12px 12px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.26);
+}
+.fe-hist__date{
+  font-size: 12px;
+  color: rgba(255,255,255,.62);
+  letter-spacing:.25px;
+}
+.fe-hist__main{
+  margin-top: 6px;
+  line-height: 1.35;
+  color: rgba(255,255,255,.92);
+}
+.fe-hist__meta{
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,.62);
+}
+
+.fe-hist__empty{
+  border-radius: 18px;
+  border: 1px dashed rgba(255,255,255,.16);
+  background: rgba(255,255,255,.03);
+  padding: 14px 12px;
+  color: rgba(255,255,255,.66);
+}
+
+.fe-hist__foot{
+  margin-top: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  flex-wrap:wrap;
+}
+.fe-hist__foot .muted{ color: rgba(255,255,255,.58); }
+.fe-hist__foot-actions{ display:flex; gap: 10px; }
+#modalEdit .fe-sheet__head h3{
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: .55px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.86);
+}
+#modalEdit .fe-sheet__head p{
+  margin: 0;
+  font-size: 12px;
+  color: var(--fe-muted);
+  max-width: 52ch;
+}
+
+/* GRID */
+#modalEdit .fe-grid{
+  display:grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+}
+#modalEdit .fe-col-12{ grid-column: span 12; }
+#modalEdit .fe-col-8{ grid-column: span 8; }
+#modalEdit .fe-col-4{ grid-column: span 4; }
+
+#modalEdit .fe-field{ display:flex; flex-direction:column; gap: 6px; }
+#modalEdit .fe-field label{
+  font-size: 12px;
+  color: rgba(255,255,255,.70);
+  margin-left: 2px;
+}
+
+#modalEdit .fe-hint{
+  font-size: 11px;
+  color: rgba(255,255,255,.48);
+  margin-left: 2px;
+}
+
+/* INPUTS */
+#modalEdit input,
+#modalEdit select,
+#modalEdit textarea{
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.18);
+  color: var(--fe-text);
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .18s ease;
+  backdrop-filter: blur(8px);
+}
+
+#modalEdit textarea{ resize: vertical; min-height: 110px; }
+
+#modalEdit input::placeholder,
+#modalEdit textarea::placeholder{ color: rgba(255,255,255,.45); }
+
+#modalEdit input:focus,
+#modalEdit select:focus,
+#modalEdit textarea:focus{
+  border-color: rgba(87,227,166,.35);
+  box-shadow: 0 0 0 4px rgba(87,227,166,.12);
+  background: rgba(0,0,0,.24);
+}
+
+#modalEdit input:focus-visible,
+#modalEdit select:focus-visible,
+#modalEdit textarea:focus-visible{ outline: none; }
+
+/* лёгкая реакция при изменении */
+#modalEdit .fe-field.is-touched input,
+#modalEdit .fe-field.is-touched select,
+#modalEdit .fe-field.is-touched textarea{
+  border-color: rgba(255,255,255,.18);
+}
+
+#modalEdit .fe-footnote{
+  margin-top: 12px;
+  padding: 10px 4px 0;
+}
+
+/* custom select compatibility */
+#modalEdit .select-selected,
+#modalEdit .custom-select .select-selected{
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(0,0,0,.18) !important;
+  color: var(--fe-text) !important;
+}
+#modalEdit .select-items,
+#modalEdit .custom-select .select-items{
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(10,14,24,.96) !important;
+  backdrop-filter: blur(12px);
+  overflow:hidden;
+}
+#modalEdit .select-items div:hover{ background: rgba(255,255,255,.06) !important; }
+
+/* RESPONSIVE */
+@media (max-width: 980px){
+  #modalEdit .fe-edit__layout{ grid-template-columns: 1fr; }
+  #modalEdit .fe-edit__nav{
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  #modalEdit .fe-edit__navlist{
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  #modalEdit .fe-edit__tab{ width: auto; }
+}
+
+@media (max-width: 720px){
+  #modalEdit .fe-edit{ height: min(820px, 90vh); }
+  #modalEdit #editTitle{ font-size: 18px; }
+  #modalEdit .fe-edit__topbar{ flex-direction: column; align-items: stretch; }
+  #modalEdit .fe-edit__actions{ justify-content: flex-end; }
+  #modalEdit .fe-grid{ grid-template-columns: repeat(6, 1fr); }
+  #modalEdit .fe-col-8{ grid-column: span 6; }
+  #modalEdit .fe-col-4{ grid-column: span 6; }
+}
+
+/* Phone UX (мобильная переработка) */
+@media (max-width: 560px), (pointer: coarse) and (max-width: 980px){
+  /* Make modal truly app-like on phones (override generic modal-body rules) */
+  #modalEdit{
+    display:block; /* instead of grid centering */
+    place-items: initial;
+  }
+  #modalEdit .modal-body{
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    border: none;
+    overflow: hidden; /* inner scroll lives in .fe-edit__content */
+  }
+
+  /* full-screen modal for phones */
+  #modalEdit .fe-edit{
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+
+  /* iOS/Safari: не даём grid/scroll ломаться */
+  #modalEdit .fe-edit__layout{
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* Sidebar прячем: на телефоне управляем разделами снизу */
+  #modalEdit .fe-edit__nav{ display:none; }
+
+  /* Topbar упрощаем — как "app bar" */
+  #modalEdit .fe-edit__topbar{
+    padding: calc(12px + env(safe-area-inset-top)) 12px 10px;
+    gap: 10px;
+    align-items: stretch;
+  }
+  #modalEdit #editTitle{ font-size: 17px; }
+  #modalEdit .fe-edit__chips{
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+
+  /* Контент скроллится внутри, а под ним фикс-док */
+  #modalEdit .fe-edit__content{
+    padding: 12px 12px 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* Actions move to bottom bar */
+  #modalEdit .fe-edit__actions{ display:none; }
+  #modalEdit .fe-edit__bottombar{ display:flex; }
+
+  /* Dock layout */
+  #modalEdit .fe-edit__bottombar{
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    display:flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  #modalEdit .fe-phone-tabs{
+    display:flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 2px 0;
+    scroll-snap-type: x mandatory;
+  }
+
+  /* Превращаем fe-edit__tab в "dock item" */
+  #modalEdit .fe-phone-tabs .fe-edit__tab{
+    width: auto;
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    padding: 10px 10px;
+    border-radius: 16px;
+    gap: 8px;
+  }
+  #modalEdit .fe-phone-tabs .fe-edit__tab-ico{ width: 30px; height: 30px; border-radius: 12px; }
+  #modalEdit .fe-phone-tabs .fe-edit__tab-txt small{ display:none; }
+
+  #modalEdit .fe-phone-actions{
+    display:flex;
+    gap: 10px;
+  }
+  #modalEdit .fe-phone-actions .fe-btn{ flex: 1 1 0; justify-content:center; }
+
+  /* prevent iOS zoom on focus */
+  #modalEdit input,
+  #modalEdit select,
+  #modalEdit textarea{ font-size: 16px; }
+
+  /* history footer buttons are thumb-friendly */
+  .fe-hist__foot-actions .btn,
+  .fe-hist__foot-actions .fe-btn{ padding: 10px 12px; border-radius: 16px; }
+}
+
+@media (max-width: 420px){
+  #modalEdit .fe-grid{ grid-template-columns: 1fr; gap: 10px; }
+  #modalEdit .fe-col-12,
+  #modalEdit .fe-col-8,
+  #modalEdit .fe-col-4{ grid-column: 1 / -1; }
+  #modalEdit .fe-sheet{ padding: 14px 12px 12px; border-radius: 20px; }
+}
+
+/* Touch devices: no "jump" on hover */
+@media (hover: none){
+  #modalEdit .fe-edit__tab:hover,
+  #modalEdit .fe-btn:hover{ transform: none; box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  #modalEdit .fe-edit__tab,
+  #modalEdit .fe-btn,
+  #modalEdit input,
+  #modalEdit textarea,
+  #modalEdit select{ transition: none !important; }
+  #modalEdit .fe-panel{ animation: none !important; }
+}
+
+/* =====================================================================
+   PHONE UX v2 — полностью новый мобильный лейаут (ПК не трогаем)
+   Активируется классом .fe-phone на #modalEdit (ставится JS-ом).
+   Цель: ощущение нативного приложения + 100% рабочий скролл на iOS.
+   ===================================================================== */
+
+/*
+  Важно: НЕ переопределяем состояние hidden.
+  Раньше здесь был display:block, из‑за чего модалка могла показываться даже с hidden.
+*/
+#modalEdit[hidden]{ display:none !important; }
+#modalEdit.fe-phone{ place-items: initial; }
+
+#modalEdit.fe-phone .modal-body{
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+#modalEdit.fe-phone .fe-edit{
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  background:
+    radial-gradient(900px 520px at 20% -10%, rgba(122,168,255,.16), transparent 55%),
+    radial-gradient(700px 520px at 110% 10%, rgba(87,227,166,.12), transparent 60%),
+    rgba(8,11,18,.98);
+}
+
+/* на телефонах убираем "вращающийся" глоу — выглядит стабильнее */
+#modalEdit.fe-phone .fe-edit::after{ display:none; }
+#modalEdit.fe-phone .fe-edit::before{ opacity: .16; }
+
+#modalEdit.fe-phone .fe-edit__layout{
+  display:flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* боковое меню на телефонах не нужно */
+#modalEdit.fe-phone .fe-edit__nav{ display:none !important; }
+
+/* верх — компактнее, без кнопок (кнопки внизу) */
+#modalEdit.fe-phone .fe-edit__topbar{
+  position: relative;
+  top: auto;
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  gap: 10px;
+}
+
+#modalEdit.fe-phone #editTitle{ font-size: 18px; }
+
+#modalEdit.fe-phone .fe-edit__actions{ display:none !important; }
+
+#modalEdit.fe-phone .fe-edit__chips{
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+#modalEdit.fe-phone .fe-edit__chips::-webkit-scrollbar{ display:none; }
+
+/* Новый таббар (создаётся JS) */
+#modalEdit.fe-phone .fe-mtabs{
+  display:flex;
+  gap: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(8,11,18,.70);
+  backdrop-filter: blur(12px);
+  scrollbar-width: none;
+}
+#modalEdit.fe-phone .fe-mtabs::-webkit-scrollbar{ display:none; }
+
+#modalEdit.fe-phone .fe-mtabs .fe-edit__tab{
+  width: auto;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-radius: 999px;
+  gap: 8px;
+  background: rgba(255,255,255,.035);
+  box-shadow: none;
+  transform: none;
+}
+
+#modalEdit.fe-phone .fe-mtabs .fe-edit__tab-ico{
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+}
+
+#modalEdit.fe-phone .fe-mtabs .fe-edit__tab-txt small{ display:none; }
+
+#modalEdit.fe-phone .fe-mtabs .fe-edit__tab.is-active{
+  border-color: rgba(87,227,166,.30);
+  background:
+    linear-gradient(135deg, rgba(87,227,166,.18), rgba(122,168,255,.14));
+}
+
+/* центр — единственный скролл */
+#modalEdit.fe-phone .fe-edit__main{
+  display:flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#modalEdit.fe-phone .fe-edit__content{
+  padding: 12px 12px 12px;
+  min-height: 0;
+  touch-action: pan-y;
+}
+
+/* низ — крупные кнопки под палец */
+#modalEdit.fe-phone .fe-edit__bottombar{
+  display:flex !important;
+  position: relative !important;
+  bottom: auto !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+#modalEdit.fe-phone .fe-edit__bottombar .fe-btn{
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  font-size: 15px;
+}
+
+/* страховка от старого дока */
+#modalEdit.fe-phone .fe-phone-tabs,
+#modalEdit.fe-phone .fe-phone-actions{ display:none !important; }
+
+/* предотвратить iOS-zoom на фокусе */
+#modalEdit.fe-phone input,
+#modalEdit.fe-phone select,
+#modalEdit.fe-phone textarea{ font-size: 16px; }

@@ -1,0 +1,53 @@
+<!-- telegram_panel_embed.html — вставляется внутрь существующей секции Telegram -->
+<div class="pane" id="tgPane">
+  <h2>Telegram — настройки</h2>
+  <div id="tgBotMeta" class="muted" style="margin-bottom:10px"></div>
+
+  <div class="row gap" style="align-items:flex-end">
+    <label style="flex:2">Токен бота
+      <input id="tgToken" placeholder="1234567890:ABCDEF...">
+    </label>
+    <label style="flex:1">Chat ID администратора
+      <input id="tgAdminChat" placeholder="123456789 или @username">
+    </label>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifySave"> Уведомлять об изменениях/сохранениях</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyLogins" checked> Уведомлять о входах пользователей</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyUsers" checked> Уведомлять о действиях пользователей</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="tgNotifyErrors" checked> Уведомлять об ошибках</label>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <button class="btn primary" id="tgSaveBtn" type="button">Сохранить</button>
+    <button class="btn" id="tgSaveAndHookBtn" type="button">Сохранить и поставить webhook</button>
+    <button class="btn" id="tgSetHookBtn" type="button">Поставить webhook</button>
+    <button class="btn" id="tgInfoHookBtn" type="button">Проверить webhook</button>
+    <button class="btn" id="tgDelHookBtn" type="button">Снять webhook</button>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Секрет привязки (для /bind)
+      <input id="tgSecret" readonly>
+    </label>
+    <button class="btn" id="tgRegenSecretBtn" type="button">Сгенерировать заново</button>
+  </div>
+
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Тестовое сообщение
+      <input id="tgTestText" placeholder="Проверка связи с ботом.">
+    </label>
+    <button class="btn" id="tgTestBtn" type="button">Тест</button>
+  </div>
+
+  <div class="space"></div>
+  <div class="glass" style="padding:12px">
+    <div class="row gap" style="justify-content:space-between;align-items:center">
+      <div class="muted">Подписчики: <b id="tgSubsCount">0</b></div>
+      <button class="btn ghost" id="tgLoadSubsBtn" type="button">Показать список</button>
+    </div>
+    <div class="space" id="tgSubsList" style="display:none; max-height:260px; overflow:auto"></div>
+  </div>
+</div>
+<script src="admin_telegram_v6.js"></script>

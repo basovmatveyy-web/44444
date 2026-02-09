@@ -1,0 +1,38 @@
+<!-- Telegram — настройки (минимальная панель как на скрине). ВСТАВИТЬ В admin.php -->
+<section class="pane" id="tgPane">
+  <h2>Telegram — настройки</h2>
+  <div id="tgBotMeta" class="muted" style="margin-bottom:10px"></div>
+
+  <div class="row gap" style="align-items:flex-end">
+    <label style="flex:2">Токен бота
+      <input id="tgToken" placeholder="1234567890:ABCDEF...">
+    </label>
+    <label style="flex:1">Chat ID администратора
+      <input id="tgAdminChat" placeholder="123456789 или @username">
+    </label>
+  </div>
+
+  <label class="row" style="gap:8px;margin-top:12px">
+    <input type="checkbox" id="tgNotifySave" checked>
+    Уведомлять о сохранениях/изменениях
+  </label>
+
+  <label class="row" style="gap:8px;margin-top:6px">
+    <input type="checkbox" id="tgNotifyLogins" checked>
+    Уведомлять о входах пользователей
+  </label>
+
+  <div class="row gap" style="margin-top:12px">
+    <button class="btn primary" id="tgSaveBtn">Сохранить</button>
+    <button class="btn" id="tgTestBtn">Тест</button>
+  </div>
+
+  <!-- При желании покажите секрет (для /bind) и кнопку «Сгенерировать» -->
+  <div class="row gap" style="margin-top:12px">
+    <label style="flex:1">Секрет привязки (для команды /bind)
+      <input id="tgSecret" readonly>
+    </label>
+    <button class="btn" id="tgRegenSecretBtn">Сгенерировать заново</button>
+  </div>
+</section>
+<script src="admin_tg.js"></script>

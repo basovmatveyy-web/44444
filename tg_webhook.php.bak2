@@ -1,0 +1,872 @@
+<?php
+/**
+ * tg_webhook.php — вебхук Telegram (v3)
+ * Новый бот с inline‑меню, регистрацией и входом в аккаунт.
+ * Дизайн сайта и админ‑панели не трогаем — меняется только логика бота.
+ */
+
+require_once __DIR__ . '/tg_lib.php';
+
+$s = tg_settings();
+$raw = file_get_contents('php://input');
+$update = json_decode($raw ?: 'null', true);
+
+if (!$s['token']) { http_response_code(200); exit('no-token'); }
+
+// Проверка секретного токена вебхука
+$headers = function_exists('getallheaders') ? getallheaders() : [];
+$recvSecret = '';
+foreach ($headers as $k => $v) {
+    if (strtolower($k) === 'x-telegram-bot-api-secret-token') { $recvSecret = $v; break; }
+}
+if ($s['secret'] && $recvSecret !== $s['secret']) {
+    http_response_code(403);
+    exit('bad-secret');
+}
+
+if (!is_array($update)) { http_response_code(200); exit('ok'); }
+
+/* ----------------- Вспомогательные функции ----------------- */
+
+/** Отправка простого сообщения */
+function tg_answer(string $text, ?int $chatId = null, array $opts = []) {
+    return tg_send_message($text, $chatId, $opts);
+}
+
+/** Рендер inline‑клавиатуры в параметр reply_markup */
+function tg_kb(array $rows) {
+    return json_encode(['inline_keyboard' => $rows], JSON_UNESCAPED_UNICODE);
+}
+
+/** Поиск пользователя по chat_id (привязка через users.tg_user_id) */
+function tg_user_by_chat(int $chatId) : ?array {
+    $db = pdo();
+    $st = $db->prepare("SELECT id, username, surname, name, role FROM users WHERE tg_user_id = ? LIMIT 1");
+    $st->execute([$chatId]);
+    $u = $st->fetch(PDO::FETCH_ASSOC);
+    return $u ?: null;
+}
+
+/** Отвязать чат от всех пользователей (чтобы привязать к другому аккаунту) */
+function tg_unbind_chat(int $chatId) : void {
+    $db = pdo();
+    $st = $db->prepare("UPDATE users SET tg_user_id = NULL WHERE tg_user_id = ?");
+    $st->execute([$chatId]);
+}
+
+/** Привязать чат к пользователю */
+function tg_bind_chat(int $chatId, int $userId) : void {
+    tg_unbind_chat($chatId);
+    $db = pdo();
+    $st = $db->prepare("UPDATE users SET tg_user_id = ? WHERE id = ?");
+    $st->execute([$chatId, $userId]);
+}
+
+/** Человекочитаемая роль */
+function tg_role_title(string $role) : string {
+    return $role === 'admin' ? 'Администратор' : 'Пользователь';
+}
+
+/** Главный текст меню */
+function tg_main_menu_text(?array $user) : string {
+    if ($user) {
+        $name = trim(($user['surname'] ?? '') . ' ' . ($user['name'] ?? ''));
+        $name = $name !== '' ? $name : ($user['username'] ?? '—');
+        $name = htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $roleTitle = htmlspecialchars(tg_role_title($user['role'] ?? 'user'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return "🏠 <b>Главное меню</b>
+"
+             . "Вы вошли как: <b>{$name}</b>
+"
+             . "Роль: <b>{$roleTitle}</b>
+
+"
+             . "Выберите действие:";
+    } else {
+        return "👋 <b>Привет!</b>
+"
+             . "Я бот системы СХПК «Береговой».
+
+"
+             . "Через меня можно:
+"
+             . "• смотреть участки по коду
+"
+             . "• работать со своим аккаунтом
+"
+             . "• получать уведомления (для админов)
+
+"
+             . "Выберите, с чего начать:";
+    }
+}
+
+/** Клавиатура главного меню */
+function tg_main_menu_kb(?array $user) : array {
+    if ($user) {
+        $kb = [
+            [
+                ['text' => '📍 Мои участки', 'callback_data' => 'fields_my'],
+                ['text' => '🔍 Найти участок', 'callback_data' => 'field_search'],
+            ],
+            [
+                ['text' => '👤 Профиль', 'callback_data' => 'profile'],
+            ],
+        ];
+        if (($user['role'] ?? '') === 'admin') {
+            $kb[] = [
+                ['text' => '🛡 Админ‑панель', 'callback_data' => 'admin_panel'],
+            ];
+        }
+        return $kb;
+    } else {
+        return [
+            [
+                ['text' => '🔑 Войти', 'callback_data' => 'auth_login'],
+                ['text' => '📝 Регистрация', 'callback_data' => 'auth_register'],
+            ],
+            [
+                ['text' => '🔍 Быстрый просмотр участка', 'callback_data' => 'field_search'],
+            ],
+            [
+                ['text' => 'ℹ️ Помощь', 'callback_data' => 'help'],
+            ],
+        ];
+    }
+}
+
+/** Показать главное меню (send / edit) */
+function tg_show_main_menu(int $chatId, ?array $user, ?int $messageId = null, ?string $cbId = null) {
+    $text = tg_main_menu_text($user);
+    $kb = tg_main_menu_kb($user);
+    $params = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML',
+        'disable_web_page_preview' => true,
+        'reply_markup' => tg_kb($kb),
+    ];
+    if ($messageId) {
+        $params['message_id'] = $messageId;
+        tg_api('editMessageText', $params);
+    } else {
+        tg_api('sendMessage', $params);
+    }
+    if ($cbId) {
+        tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+    }
+}
+
+/** Получить / обновить сессию */
+function tg_get_session(int $chatId) : array {
+    if (!function_exists('tg_session_get')) {
+        return ['state' => null, 'data' => []];
+    }
+    return tg_session_get($chatId);
+}
+function tg_set_session(int $chatId, ?string $state, array $data = []) : void {
+    if (!function_exists('tg_session_set')) return;
+    tg_session_set($chatId, $state, $data);
+}
+
+/** Формат карточки участка */
+function tg_format_field_card(array $row) : string {
+    $fmt = function($v) {
+        return $v ? htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') : '—';
+    };
+    $text = "📍 Участок <b>{$fmt($row['field_code'] ?? '')}</b>\n";
+    $text .= "Площадь: <b>{$fmt($row['area_ha'] ?? '')}</b> га\n";
+    $text .= "Культура: <b>{$fmt($row['culture'] ?? '')}</b>\n";
+    $text .= "Вспашка: {$fmt($row['plow_date'] ?? '')}\n";
+    $text .= "Сев: {$fmt($row['sow_date'] ?? '')}\n";
+    $text .= "Обработка: {$fmt($row['treatment_date'] ?? '')} — {$fmt($row['treatment_desc'] ?? '')}\n";
+    $text .= "Полив: {$fmt($row['last_water_date'] ?? '')}\n";
+    $text .= "Уборка: {$fmt($row['harvest_date'] ?? '')}\n";
+    $text .= "Валовый сбор: {$fmt($row['gross_yield'] ?? '')}\n";
+    $text .= "Средняя урожайность: {$fmt($row['avg_yield'] ?? '')}\n";
+    $text .= "Заметки: {$fmt($row['notes'] ?? '')}";
+    return $text;
+}
+
+/** Получить информацию по участку */
+function tg_load_field(string $code) : ?array {
+    $code = preg_replace('~\D~','', $code);
+    if (strlen($code) !== 4) return null;
+    $db = pdo();
+    $st = $db->prepare("SELECT f.field_code, f.area_ha, f.plow_date, f.sow_date, f.treatment_date, f.treatment_desc,
+                               f.last_water_date, f.harvest_date, f.gross_yield, f.avg_yield, f.notes,
+                               c.title AS culture
+                        FROM fields f
+                        LEFT JOIN cultures c ON c.id = f.culture_id
+                        WHERE f.field_code = ? LIMIT 1");
+    $st->execute([$code]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+/** Проверить, есть ли участок в избранном */
+function tg_is_fav(int $chatId, string $code) : bool {
+    if (!function_exists('tg_favorites_is')) return false;
+    return tg_favorites_is($chatId, $code);
+}
+
+/** Показать карточку участка с кнопками */
+function tg_show_field(int $chatId, string $code, ?int $messageId = null, ?string $cbId = null) {
+    $row = tg_load_field($code);
+    if (!$row) {
+        tg_answer("Участок <b>".htmlspecialchars($code, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')."</b> не найден.", $chatId);
+        if ($cbId) tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        return;
+    }
+    $text = tg_format_field_card($row);
+    $isFav = tg_is_fav($chatId, $row['field_code']);
+    $favBtn = $isFav
+        ? ['text' => '⭐ Убрать из избранного', 'callback_data' => 'fav_del:'.$row['field_code']]
+        : ['text' => '⭐ В избранное', 'callback_data' => 'fav_add:'.$row['field_code']];
+    $kb = [
+        [ $favBtn ],
+        [
+            ['text' => '🔁 Другой участок', 'callback_data' => 'field_search'],
+            ['text' => '🏠 Меню', 'callback_data' => 'home'],
+        ],
+    ];
+    $params = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML',
+        'disable_web_page_preview' => true,
+        'reply_markup' => tg_kb($kb),
+    ];
+    if ($messageId) {
+        $params['message_id'] = $messageId;
+        tg_api('editMessageText', $params);
+    } else {
+        tg_api('sendMessage', $params);
+    }
+    if ($cbId) tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+}
+
+/** Показать избранные участки */
+function tg_show_favorites(int $chatId, ?int $messageId = null, ?string $cbId = null) {
+    if (!function_exists('tg_favorites_list')) {
+        tg_answer("Избранные участки недоступны.", $chatId);
+        return;
+    }
+    $rows = tg_favorites_list($chatId);
+    if (!$rows) {
+        $text = "⭐ У вас пока нет избранных участков.\n\n"
+              . "Найдите участок по коду и добавьте его в избранное кнопкой «⭐».";
+        $kb = [
+            [ ['text' => '🔍 Найти участок', 'callback_data' => 'field_search'] ],
+            [ ['text' => '🏠 Меню', 'callback_data' => 'home'] ],
+        ];
+    } else {
+        $lines = ["⭐ <b>Мои участки</b>"];
+        foreach ($rows as $r) {
+            $code = htmlspecialchars($r['field_code'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $cult = htmlspecialchars($r['culture'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $area = htmlspecialchars($r['area_ha'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $lines[] = "• <b>{$code}</b> — {$cult}, {$area} га";
+        }
+        $text = implode("\n", $lines);
+        $kb = [];
+        foreach ($rows as $r) {
+            $code = $r['field_code'];
+            $kb[] = [
+                ['text' => "📍 {$code}", 'callback_data' => 'field_view:'.$code],
+                ['text' => "✖ {$code}", 'callback_data' => 'fav_del:'.$code],
+            ];
+        }
+        $kb[] = [ ['text' => '🏠 Меню', 'callback_data' => 'home'] ];
+    }
+
+    $params = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML',
+        'disable_web_page_preview' => true,
+        'reply_markup' => tg_kb($kb),
+    ];
+    if ($messageId) {
+        $params['message_id'] = $messageId;
+        tg_api('editMessageText', $params);
+    } else {
+        tg_api('sendMessage', $params);
+    }
+    if ($cbId) tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+}
+
+/** Текст /help */
+function tg_help_text() : string {
+    return "ℹ️ <b>Справка</b>\n"
+         . "— Главное меню: /start\n"
+         . "— Быстрый просмотр участка: /field 1234\n"
+         . "— Ваш chat id: /id\n"
+         . "— Привязка админ‑чата: /bind SECRET\n"
+         . "— Сводка по системе: /stats (для админа)\n"
+         . "— Последние события: /last (для админа)";
+}
+
+/* ----------------- Обработка сообщений по состояниям ----------------- */
+
+function tg_handle_stateful_message(int $chatId, string $text, array $session, ?array $user) : void {
+    $state = $session['state'] ?? null;
+    $data  = $session['data']  ?? [];
+
+    // Глобальный выход
+    if ($text === '/cancel') {
+        tg_set_session($chatId, null, []);
+        tg_answer("❌ Действие отменено.", $chatId);
+        tg_show_main_menu($chatId, $user, null, null);
+        return;
+    }
+
+    $db = pdo();
+
+    switch ($state) {
+        case 'reg_surname': {
+            $surname = trim($text);
+            if ($surname === '') {
+                tg_answer("Введите фамилию:", $chatId);
+                return;
+            }
+            $data['surname'] = $surname;
+            tg_set_session($chatId, 'reg_name', $data);
+            tg_answer("Отлично. Теперь введите имя:", $chatId);
+        } break;
+
+        case 'reg_name': {
+            $name = trim($text);
+            if ($name === '') {
+                tg_answer("Введите имя:", $chatId);
+                return;
+            }
+            $data['name'] = $name;
+            tg_set_session($chatId, 'reg_username', $data);
+            tg_answer("Придумайте логин (username):", $chatId);
+        } break;
+
+        case 'reg_username': {
+            $username = trim($text);
+            if ($username === '') {
+                tg_answer("Логин не может быть пустым. Введите логин:", $chatId);
+                return;
+            }
+            $st = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $st->execute([$username]);
+            if ((int)$st->fetchColumn() > 0) {
+                tg_answer("Такой логин уже используется. Введите другой логин:", $chatId);
+                return;
+            }
+            $data['username'] = $username;
+            tg_set_session($chatId, 'reg_password', $data);
+            tg_answer("Придумайте пароль (минимум 4 символа):", $chatId);
+        } break;
+
+        case 'reg_password': {
+            $password = trim($text);
+            if (strlen($password) < 4) {
+                tg_answer("Пароль слишком короткий. Введите пароль ещё раз (не менее 4 символов):", $chatId);
+                return;
+            }
+            $surname = trim((string)($data['surname'] ?? ''));
+            $name    = trim((string)($data['name'] ?? ''));
+            $username= trim((string)($data['username'] ?? ''));
+            if ($surname === '' || $name === '' || $username === '') {
+                tg_set_session($chatId, null, []);
+                tg_answer("Произошла ошибка сессии. Попробуйте зарегистрироваться ещё раз.", $chatId);
+                return;
+            }
+            // На всякий случай проверим логин ещё раз
+            $st = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $st->execute([$username]);
+            if ((int)$st->fetchColumn() > 0) {
+                tg_answer("Такой логин уже используется. Начните регистрацию заново.", $chatId);
+                tg_set_session($chatId, null, []);
+                return;
+            }
+
+            // Привяжем этот чат только к одному пользователю
+            tg_unbind_chat($chatId);
+
+            $st = $db->prepare("INSERT INTO users (surname, name, username, password, role, tg_user_id) VALUES (?,?,?,?,?,?)");
+            $st->execute([$surname, $name, $username, $password, 'user', $chatId]);
+            $userId = (int)$db->lastInsertId();
+
+            tg_set_session($chatId, null, []);
+            $user = [
+                'id' => $userId,
+                'surname' => $surname,
+                'name' => $name,
+                'username' => $username,
+                'role' => 'user',
+            ];
+            $fullName = htmlspecialchars(trim($surname.' '.$name) ?: $username, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            tg_answer("✅ Регистрация завершена. Вы вошли как <b>{$fullName}</b>.", $chatId);
+            tg_show_main_menu($chatId, $user, null, null);
+        } break;
+
+        case 'login_username': {
+            $username = trim($text);
+            if ($username === '') {
+                tg_answer("Введите логин:", $chatId);
+                return;
+            }
+            $data = ['username' => $username];
+            tg_set_session($chatId, 'login_password', $data);
+            tg_answer("Введите пароль:", $chatId);
+        } break;
+
+        case 'login_password': {
+            $username = trim((string)($data['username'] ?? ''));
+            $password = trim($text);
+            if ($username === '' || $password === '') {
+                tg_answer("Логин или пароль пустой. Попробуйте войти ещё раз.", $chatId);
+                tg_set_session($chatId, null, []);
+                return;
+            }
+            $st = $db->prepare("SELECT id, username, surname, name, role, password FROM users WHERE username = ? LIMIT 1");
+            $st->execute([$username]);
+            $u = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$u || (string)$u['password'] !== $password) {
+                tg_answer("⛔ Неверный логин или пароль. Попробуйте ещё раз.", $chatId);
+                tg_set_session($chatId, 'login_username', []);
+                tg_answer("Введите логин:", $chatId);
+                return;
+            }
+
+            // Привязываем чат к этому пользователю
+            tg_bind_chat($chatId, (int)$u['id']);
+
+            tg_set_session($chatId, null, []);
+            $fullName = htmlspecialchars(trim(($u['surname'] ?? '').' '.($u['name'] ?? '')) ?: ($u['username'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            tg_answer("✅ Вы успешно вошли как <b>{$fullName}</b>.", $chatId);
+            $user = $u;
+            tg_show_main_menu($chatId, $user, null, null);
+        } break;
+
+        case 'field_search': {
+            $code = preg_replace('~\D~','', $text);
+            if (strlen($code) !== 4) {
+                tg_answer("Введите код участка — ровно 4 цифры:", $chatId);
+                return;
+            }
+            tg_show_field($chatId, $code, null, null);
+            // Состояние оставляем, чтобы можно было ввести ещё один код
+        } break;
+
+        case 'admin_broadcast': {
+            // Только для админа
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
+                tg_answer("⛔ Рассылка доступна только администраторам.", $chatId);
+                tg_set_session($chatId, null, []);
+                return;
+            }
+            $textToSend = trim($text);
+            if ($textToSend === '') {
+                tg_answer("Текст пустой. Введите текст рассылки или /cancel для отмены:", $chatId);
+                return;
+            }
+            $res = tg_broadcast($textToSend);
+            $sent   = (int)($res['sent']   ?? 0);
+            $failed = (int)($res['failed'] ?? 0);
+            tg_answer("📢 Рассылка завершена.\n✅ Отправлено: {$sent}\n⚠️ Ошибок: {$failed}", $chatId);
+            tg_set_session($chatId, null, []);
+            tg_show_main_menu($chatId, $user, null, null);
+        } break;
+
+        default: {
+            // Неизвестное состояние — сброс
+            tg_set_session($chatId, null, []);
+            tg_show_main_menu($chatId, $user, null, null);
+        } break;
+    }
+}
+
+/* ----------------- Обработка callback_query ----------------- */
+
+function tg_handle_callback(array $cb) : void {
+    $chatId = (int)($cb['message']['chat']['id'] ?? 0);
+    $msgId  = (int)($cb['message']['message_id'] ?? 0);
+    $data   = (string)($cb['data'] ?? '');
+    $cbId   = (string)($cb['id'] ?? '');
+    if (!$chatId) return;
+
+    tg_subscriber_upsert($cb['message']);
+
+    $user    = tg_user_by_chat($chatId);
+    $session = tg_get_session($chatId);
+
+    if ($data === 'home') {
+        tg_set_session($chatId, null, []);
+        tg_show_main_menu($chatId, $user, $msgId, $cbId);
+        return;
+    }
+
+    if ($data === 'help') {
+        $text = tg_help_text();
+        $kb = [
+            [ ['text' => '🏠 Меню', 'callback_data' => 'home'] ],
+        ];
+        $params = [
+            'chat_id' => $chatId,
+            'message_id' => $msgId,
+            'text' => $text,
+            'parse_mode' => 'HTML',
+            'disable_web_page_preview' => true,
+            'reply_markup' => tg_kb($kb),
+        ];
+        tg_api('editMessageText', $params);
+        tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        return;
+    }
+
+    switch (true) {
+        case ($data === 'auth_login'): {
+            tg_set_session($chatId, 'login_username', []);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+            tg_answer("Введите логин:", $chatId);
+        } break;
+
+        case ($data === 'auth_register'): {
+            tg_set_session($chatId, 'reg_surname', []);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+            tg_answer("Давайте зарегистрируемся. Сначала введите вашу фамилию:", $chatId);
+        } break;
+
+        case ($data === 'field_search'): {
+            tg_set_session($chatId, 'field_search', []);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+            tg_answer("Введите код участка (4 цифры):", $chatId);
+        } break;
+
+        case ($data === 'fields_my'): {
+            tg_show_favorites($chatId, $msgId, $cbId);
+        } break;
+
+        case (strpos($data, 'field_view:') === 0): {
+            $code = substr($data, strlen('field_view:'));
+            tg_show_field($chatId, $code, $msgId, $cbId);
+        } break;
+
+        case (strpos($data, 'fav_add:') === 0): {
+            $code = substr($data, strlen('fav_add:'));
+            if (function_exists('tg_favorites_add')) {
+                tg_favorites_add($chatId, $code);
+            }
+            tg_show_field($chatId, $code, $msgId, $cbId);
+        } break;
+
+        case (strpos($data, 'fav_del:') === 0): {
+            $code = substr($data, strlen('fav_del:'));
+            if (function_exists('tg_favorites_remove')) {
+                tg_favorites_remove($chatId, $code);
+            }
+            // После удаления — либо обновляем список, либо просто карточку
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+            tg_show_field($chatId, $code, $msgId, null);
+        } break;
+
+        case ($data === 'profile'): {
+            if (!$user) {
+                $text = "Вы ещё не авторизованы. Нажмите «🔑 Войти» или «📝 Регистрация».";
+                $kb = [
+                    [
+                        ['text' => '🔑 Войти', 'callback_data' => 'auth_login'],
+                        ['text' => '📝 Регистрация', 'callback_data' => 'auth_register'],
+                    ],
+                    [ ['text' => '🏠 Меню', 'callback_data' => 'home'] ],
+                ];
+            } else {
+                $fullName = trim(($user['surname'] ?? '').' '.($user['name'] ?? '')) ?: ($user['username'] ?? '—');
+                $fullName = htmlspecialchars($fullName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $roleTitle = htmlspecialchars(tg_role_title($user['role'] ?? 'user'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $text = "👤 <b>Профиль</b>\n"
+                      . "Имя: <b>{$fullName}</b>\n"
+                      . "Логин: <code>".htmlspecialchars($user['username'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')."</code>\n"
+                      . "Роль: <b>{$roleTitle}</b>";
+                $kb = [
+                    [ ['text' => '📍 Мои участки', 'callback_data' => 'fields_my'] ],
+                    [ ['text' => '🏠 Меню', 'callback_data' => 'home'] ],
+                ];
+            }
+            $params = [
+                'chat_id' => $chatId,
+                'message_id' => $msgId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => tg_kb($kb),
+            ];
+            tg_api('editMessageText', $params);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        } break;
+
+        case ($data === 'admin_panel'): {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
+                tg_api('answerCallbackQuery', ['callback_query_id' => $cbId, 'text' => 'Только для администраторов', 'show_alert' => true]);
+                return;
+            }
+            $fullName = trim(($user['surname'] ?? '').' '.($user['name'] ?? '')) ?: ($user['username'] ?? '—');
+            $fullName = htmlspecialchars($fullName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $text = "🛡 <b>Админ‑панель</b>\n"
+                  . "Вы вошли как: <b>{$fullName}</b>\n\n"
+                  . "Выберите действие:";
+            $kb = [
+                [
+                    ['text' => '📊 Статистика', 'callback_data' => 'admin_stats'],
+                    ['text' => '📜 Журнал', 'callback_data' => 'admin_logs'],
+                ],
+                [
+                    ['text' => '📢 Рассылка', 'callback_data' => 'admin_broadcast'],
+                ],
+                [
+                    ['text' => '🏠 Меню', 'callback_data' => 'home'],
+                ],
+            ];
+            $params = [
+                'chat_id' => $chatId,
+                'message_id' => $msgId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => tg_kb($kb),
+            ];
+            tg_api('editMessageText', $params);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        } break;
+
+        case ($data === 'admin_stats'): {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
+                tg_api('answerCallbackQuery', ['callback_query_id' => $cbId, 'text' => 'Только для администраторов', 'show_alert' => true]);
+                return;
+            }
+            $db = pdo();
+            $u = (int)$db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+            $c = (int)$db->query("SELECT COUNT(*) FROM cultures")->fetchColumn();
+            $f = (int)$db->query("SELECT COUNT(*) FROM fields")->fetchColumn();
+            $subs = 0;
+            try {
+                tg_ensure_subscribers();
+                $subs = (int)$db->query("SELECT COUNT(*) FROM tg_subscribers")->fetchColumn();
+            } catch (Throwable $e) {}
+
+            $text = "📊 <b>Статистика</b>\n"
+                  . "👥 Пользователи: <b>{$u}</b>\n"
+                  . "🌾 Культуры: <b>{$c}</b>\n"
+                  . "📍 Участки: <b>{$f}</b>\n"
+                  . "🤖 Подписчики бота: <b>{$subs}</b>";
+            $kb = [
+                [
+                    ['text' => '📜 Журнал', 'callback_data' => 'admin_logs'],
+                    ['text' => '📢 Рассылка', 'callback_data' => 'admin_broadcast'],
+                ],
+                [
+                    ['text' => '🏠 Меню', 'callback_data' => 'home'],
+                ],
+            ];
+            $params = [
+                'chat_id' => $chatId,
+                'message_id' => $msgId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => tg_kb($kb),
+            ];
+            tg_api('editMessageText', $params);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        } break;
+
+        case ($data === 'admin_logs'): {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
+                tg_api('answerCallbackQuery', ['callback_query_id' => $cbId, 'text' => 'Только для администраторов', 'show_alert' => true]);
+                return;
+            }
+            $db = pdo();
+            $q = $db->query("SELECT a.created_at, COALESCE(a.event,a.action) AS evt, a.details, u.username
+                             FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+                             ORDER BY a.id DESC LIMIT 5");
+            $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+            if (!$rows) {
+                $text = "Журнал пока пуст.";
+            } else {
+                $lines = ["📜 <b>Последние события</b>"];
+                foreach ($rows as $r) {
+                    $evt = htmlspecialchars($r['evt'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $det = htmlspecialchars($r['details'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $usr = htmlspecialchars($r['username'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $tm  = htmlspecialchars($r['created_at'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $lines[] = "• <b>{$evt}</b> — {$usr}\n  {$det}\n  <i>{$tm}</i>";
+                }
+                $text = implode("\n\n", $lines);
+            }
+            $kb = [
+                [
+                    ['text' => '📊 Статистика', 'callback_data' => 'admin_stats'],
+                    ['text' => '📢 Рассылка', 'callback_data' => 'admin_broadcast'],
+                ],
+                [
+                    ['text' => '🏠 Меню', 'callback_data' => 'home'],
+                ],
+            ];
+            $params = [
+                'chat_id' => $chatId,
+                'message_id' => $msgId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => tg_kb($kb),
+            ];
+            tg_api('editMessageText', $params);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        } break;
+
+        case ($data === 'admin_broadcast'): {
+            if (!$user || ($user['role'] ?? '') !== 'admin') {
+                tg_api('answerCallbackQuery', ['callback_query_id' => $cbId, 'text' => 'Только для администраторов', 'show_alert' => true]);
+                return;
+            }
+            tg_set_session($chatId, 'admin_broadcast', []);
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+            tg_answer("Отправьте текст рассылки для всех подписчиков бота. Для отмены используйте /cancel.", $chatId);
+        } break;
+
+        default: {
+            tg_api('answerCallbackQuery', ['callback_query_id' => $cbId]);
+        } break;
+    }
+}
+
+/* ----------------- Обработка входящих апдейтов ----------------- */
+
+if (isset($update['callback_query'])) {
+    tg_handle_callback($update['callback_query']);
+} elseif (isset($update['message'])) {
+    $msg = $update['message'];
+    tg_subscriber_upsert($msg);
+
+    $chatId = (int)($msg['chat']['id'] ?? 0);
+    if (!$chatId) { http_response_code(200); exit('ok'); }
+
+    $text = trim((string)($msg['text'] ?? ''));
+    $text = preg_replace('~\s+~u',' ', $text);
+    $user = tg_user_by_chat($chatId);
+    $session = tg_get_session($chatId);
+
+    // Отдельно обрабатываем команду /bind
+    if (stripos($text, '/bind ') === 0) {
+        $secret = trim(substr($text, 6));
+        global $s;
+        if ($secret !== '' && $secret === $s['secret']) {
+            setting_set('tg_admin_chat', (string)$chatId);
+            tg_answer("✅ Этот чат привязан как <b>админ‑чат</b>.\nChat ID: <code>{$chatId}</code>", $chatId);
+        } else {
+            tg_answer("⛔ Неверный секрет. Скопируйте секрет из админ‑панели Telegram‑настроек.", $chatId);
+        }
+        http_response_code(200);
+        exit('ok');
+    }
+
+    // Глобальные команды
+    if ($text === '/start' || stripos($text, '/start ') === 0) {
+        tg_set_session($chatId, null, []);
+        tg_show_main_menu($chatId, $user, null, null);
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if ($text === '/help') {
+        tg_answer(tg_help_text(), $chatId);
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if ($text === '/id') {
+        tg_answer("Ваш chat id: <code>{$chatId}</code>", $chatId);
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if (stripos($text, '/field ') === 0) {
+        $code = trim(substr($text, 7));
+        if (!preg_match('~^\d{4}$~', preg_replace('~\D~','', $code))) {
+            tg_answer("Укажите код участка: <code>/field 1253</code>", $chatId);
+        } else {
+            $code = preg_replace('~\D~','', $code);
+            tg_show_field($chatId, $code, null, null);
+        }
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if ($text === '/stats') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
+            tg_answer("⛔ Команда /stats доступна только администраторам.", $chatId);
+        } else {
+            $db = pdo();
+            $u = (int)$db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+            $c = (int)$db->query("SELECT COUNT(*) FROM cultures")->fetchColumn();
+            $f = (int)$db->query("SELECT COUNT(*) FROM fields")->fetchColumn();
+            $textStats = "Сводка:\n👥 Пользователи: <b>{$u}</b>\n🌾 Культуры: <b>{$c}</b>\n📍 Участки: <b>{$f}</b>";
+            tg_answer($textStats, $chatId);
+        }
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if ($text === '/last') {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
+            tg_answer("⛔ Команда /last доступна только администраторам.", $chatId);
+        } else {
+            $db = pdo();
+            $q = $db->query("SELECT a.created_at, COALESCE(a.event,a.action) AS evt, a.details, u.username
+                             FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+                             ORDER BY a.id DESC LIMIT 5");
+            $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+            if (!$rows) {
+                tg_answer("Журнал пока пуст.", $chatId);
+            } else {
+                $lines = [];
+                foreach ($rows as $r) {
+                    $evt = htmlspecialchars($r['evt'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $det = htmlspecialchars($r['details'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $usr = htmlspecialchars($r['username'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $tm  = htmlspecialchars($r['created_at'] ?? '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $lines[] = "• <b>{$evt}</b> — {$usr}\n  {$det}\n  <i>{$tm}</i>";
+                }
+                tg_answer("Последние события:\n\n".implode("\n\n", $lines), $chatId);
+            }
+        }
+        http_response_code(200);
+        exit('ok');
+    }
+
+    if (stripos($text, '/broadcast ') === 0) {
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
+            tg_answer("⛔ Команда /broadcast доступна только администраторам.", $chatId);
+        } else {
+            $msg = trim(substr($text, 11));
+            if ($msg !== '') {
+                $res = tg_broadcast($msg);
+                $sent   = (int)($res['sent'] ?? 0);
+                $failed = (int)($res['failed'] ?? 0);
+                tg_answer("Рассылка завершена: отправлено {$sent}, ошибок {$failed}.", $chatId);
+            }
+        }
+        http_response_code(200);
+        exit('ok');
+    }
+
+    // Если есть активное состояние — отдаём в state‑машину
+    if (!empty($session['state'])) {
+        tg_handle_stateful_message($chatId, $text, $session, $user);
+        http_response_code(200);
+        exit('ok');
+    }
+
+    // По умолчанию — показываем меню
+    tg_show_main_menu($chatId, $user, null, null);
+}
+
+http_response_code(200);
+echo 'ok';
